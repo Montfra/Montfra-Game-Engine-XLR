@@ -6,6 +6,7 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
+#include "text/Text.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -150,10 +151,68 @@ int main()
 
     glEnable(GL_DEPTH_TEST);
 
-    // Viewport initial
+    // Viewport initiale
     int fbw = 0, fbh = 0;
     glfwGetFramebufferSize(window, &fbw, &fbh);
     glViewport(0, 0, fbw, fbh);
+
+    // 6bis) Préparer un texte HUD (utilise FreeType)
+    auto file_exists = [](const std::string& p) {
+        std::ifstream f(p, std::ios::binary);
+        return f.good();
+    };
+    auto choose_default_font = [&]() -> std::string {
+#ifdef __APPLE__
+        const char* candidates[] = {
+            "/System/Library/Fonts/Supplemental/Arial.ttf",
+            "/System/Library/Fonts/Supplemental/Helvetica.ttc",
+            "/Library/Fonts/Arial.ttf",
+        };
+#elif defined(_WIN32)
+        const char* candidates[] = {
+            "C:/Windows/Fonts/arial.ttf",
+            "C:/Windows/Fonts/segoeui.ttf",
+        };
+#else
+        const char* candidates[] = {
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+            "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
+        };
+#endif
+        for (const char* c : candidates) if (file_exists(c)) return std::string(c);
+        return std::string();
+    };
+
+    Text hud;
+    hud.set_text("MGE-XLR");
+    hud.set_text_size(4);
+    hud.set_text_color(0.8f, 0.8f, 0.8f, 0.5f);
+    hud.set_position(0.0f, 20.0f, false); // 2% from left, 95% height (near top)
+    // Alignement et z-index non utilisés dans cette version simplifiée
+    
+    Text hud2;
+    hud2.set_text("v0.2");
+    hud2.set_text_size(2);
+    hud2.set_text_color(1.0f, 0.5f, 0.4f, 1.0f);
+    hud2.set_position(0.0f, 0.0f, false); // 2% from left, 95% height (near top)
+    // Version simplifiée: pas d'alignement ni z-index
+
+    {
+        std::string font_path = choose_default_font();
+        if (font_path.empty()) {
+            std::fprintf(stderr, "[INFO] Aucune police système trouvée automatiquement. \n"
+                                 "       Utilisez set_text_font() avec un chemin .ttf/.otf.\n");
+        } else {
+            hud.set_text_font(font_path);
+            hud2.set_text_font("resources/Jersey25-Regular.ttf");
+        }
+    }
+    
+    hud.set_text_font("resources/Jersey25-Regular.ttf");
+    hud2.set_text_font("resources/Jersey25-Regular.ttf");
+    
+    // Version simplifiée: pas de centrage via alignement
 
     // 7) Boucle principale
     while (!glfwWindowShouldClose(window)) {
@@ -174,6 +233,11 @@ int main()
 
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
+
+        // Dessin du texte HUD (overlay 2D)
+        hud.draw();
+        hud2.draw();
+        hud.draw();
 
         glfwSwapBuffers(window);
     }
@@ -216,6 +280,8 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height)
 {
     // Important : utiliser la taille du framebuffer (pixels), pas celle de la fenêtre (points)
     glViewport(0, 0, width, height);
+    // Notifier le module texte pour recalculer la projection orthographique
+    Text::on_framebuffer_resized(width, height);
 }
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)

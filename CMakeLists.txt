@@ -72,7 +72,11 @@ else()
   endif()
 endif()
 
-add_executable(MGE_XLR src/main.cpp)
+add_executable(MGE_XLR
+  src/main.cpp
+  src/text/Text.cpp
+  src/text/Text.h
+)
 
 # Define shader directory at compile time (absolute path, forward slashes)
 file(TO_CMAKE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/shaders" SHADERS_PATH)
@@ -92,6 +96,10 @@ else()
 endif()
 
 target_link_libraries(MGE_XLR PRIVATE OpenGL::GL)
+
+# FreeType (required for text rendering)
+find_package(Freetype REQUIRED)
+target_link_libraries(MGE_XLR PRIVATE Freetype::Freetype)
 
 # On MSVC, be strict and enable parallel build
 if(MSVC)

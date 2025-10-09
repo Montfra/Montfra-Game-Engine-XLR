@@ -1,0 +1,373 @@
+// Text.cpp - Implementation of Text class using FreeType and OpenGL
+
+#include "Text.h"
+
+#include <glad/glad.h>
+
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+#include <vector>
+#include <cstdio>
+#include <cstdint>
+#include <cmath>
+
+// Static storage
+std::unordered_map<Text::FontKey, Text::GlyphMap, Text::FontKeyHash> Text::s_glyph_cache;
+unsigned int Text::s_vao = 0;
+unsigned int Text::s_vbo = 0;
+unsigned int Text::s_shader = 0;
+int Text::s_uProjLoc = -1;
+int Text::s_uTextColorLoc = -1;
+void* Text::s_ft_library = nullptr; // FT_Library
+int Text::s_fb_width = 0;
+int Text::s_fb_height = 0;
+
+namespace {
+
+// Simple orthographic projection matrix, origin at bottom-left, z range [-1,1]
+static void make_ortho(float left, float right, float bottom, float top, float znear, float zfar, float out[16])
+{
+    for (int i=0;i<16;++i) out[i] = 0.0f;
+    out[0] = 2.0f / (right - left);
+    out[5] = 2.0f / (top - bottom);
+    out[10] = -2.0f / (zfar - znear);
+    out[12] = - (right + left) / (right - left);
+    out[13] = - (top + bottom) / (top - bottom);
+    out[14] = - (zfar + znear) / (zfar - znear);
+    out[15] = 1.0f;
+}
+
+static unsigned int compile_shader(GLenum type, const char* src)
+{
+    GLuint sh = glCreateShader(type);
+    glShaderSource(sh, 1, &src, nullptr);
+    glCompileShader(sh);
+    GLint ok = GL_FALSE;
+    glGetShaderiv(sh, GL_COMPILE_STATUS, &ok);
+    if (!ok) {
+        GLint len = 0; glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &len);
+        std::string log(len > 0 ? len : 1, '\0');
+        glGetShaderInfoLog(sh, len, nullptr, log.data());
+        std::fprintf(stderr, "[Text] Shader compile error (%s):\n%s\n", type==GL_VERTEX_SHADER?"VERTEX":"FRAGMENT", log.c_str());
+        glDeleteShader(sh);
+        return 0;
+    }
+    return sh;
+}
+
+static unsigned int link_program(GLuint vs, GLuint fs)
+{
+    GLuint p = glCreateProgram();
+    glAttachShader(p, vs);
+    glAttachShader(p, fs);
+    glLinkProgram(p);
+    GLint ok = GL_FALSE;
+    glGetProgramiv(p, GL_LINK_STATUS, &ok);
+    if (!ok) {
+        GLint len = 0; glGetProgramiv(p, GL_INFO_LOG_LENGTH, &len);
+        std::string log(len > 0 ? len : 1, '\0');
+        glGetProgramInfoLog(p, len, nullptr, log.data());
+        std::fprintf(stderr, "[Text] Program link error:\n%s\n", log.c_str());
+        glDeleteProgram(p);
+        return 0;
+    }
+    return p;
+}
+
+} // namespace
+
+Text::Text() { /* lazy init in draw */ }
+Text::~Text() { /* glyph cache persists for process lifetime */ }
+
+void Text::set_position(float x, float y, bool in_percentage) {
+    m_pos_x = x; m_pos_y = y; m_pos_is_percent = in_percentage;
+}
+
+void Text::set_text(const std::string& str) {
+    m_text = str;
+}
+
+bool Text::set_text_font(const std::string& font_path) {
+    m_font_path = font_path;
+    m_font_ready = false; // will load lazily on next draw
+    return true;
+}
+
+void Text::set_text_size(int size_1_to_10) {
+    if (size_1_to_10 < 1) size_1_to_10 = 1;
+    if (size_1_to_10 > 10) size_1_to_10 = 10;
+    if (m_size_level != size_1_to_10) {
+        m_size_level = size_1_to_10;
+        m_font_ready = false; // pixel size changed: refresh glyphs
+    }
+}
+
+void Text::set_text_color(float r, float g, float b, float a) {
+    m_color[0]=r; m_color[1]=g; m_color[2]=b; m_color[3]=a;
+}
+
+// z-index and alignment removed in this simplified version
+
+void Text::show() { m_visible = true; }
+void Text::hide() { m_visible = false; }
+
+void Text::on_framebuffer_resized(int fb_width, int fb_height) {
+    s_fb_width = fb_width;
+    s_fb_height = fb_height;
+}
+
+bool Text::init_renderer()
+{
+    if (s_shader != 0 && s_vao != 0 && s_vbo != 0 && s_ft_library != nullptr) return true;
+
+    // Init FreeType
+    if (!s_ft_library) {
+        FT_Library lib = nullptr;
+        if (FT_Init_FreeType(&lib) != 0) {
+            std::fprintf(stderr, "[Text] FreeType init failed.\n");
+            return false;
+        }
+        s_ft_library = lib;
+    }
+
+    // GL objects
+    if (s_vao == 0) {
+        glGenVertexArrays(1, &s_vao);
+        glBindVertexArray(s_vao);
+        glGenBuffers(1, &s_vbo);
+        glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
+        // dynamic buffer for quads: each vertex = 4 floats (x,y,u,v)
+        glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 6 * 4, nullptr, GL_DYNAMIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glBindVertexArray(0);
+    }
+
+    if (s_shader == 0) {
+        static const char* VERT = R"GLSL(
+            #version 330 core
+            layout(location = 0) in vec4 aPosUV; // x,y,u,v
+            uniform mat4 uProjection;
+            out vec2 vUV;
+            void main() {
+                vUV = aPosUV.zw;
+                gl_Position = uProjection * vec4(aPosUV.xy, 0.0, 1.0);
+            }
+        )GLSL";
+        static const char* FRAG = R"GLSL(
+            #version 330 core
+            in vec2 vUV;
+            out vec4 FragColor;
+            uniform sampler2D uTex;
+            uniform vec4 uTextColor;
+            void main() {
+                float a = texture(uTex, vUV).r; // glyph stored in RED
+                FragColor = vec4(uTextColor.rgb, uTextColor.a * a);
+            }
+        )GLSL";
+
+        GLuint vs = compile_shader(GL_VERTEX_SHADER, VERT);
+        GLuint fs = compile_shader(GL_FRAGMENT_SHADER, FRAG);
+        if (!vs || !fs) return false;
+        s_shader = link_program(vs, fs);
+        glDeleteShader(vs);
+        glDeleteShader(fs);
+        if (!s_shader) return false;
+        s_uProjLoc = glGetUniformLocation(s_shader, "uProjection");
+        s_uTextColorLoc = glGetUniformLocation(s_shader, "uTextColor");
+        int uTexLoc = glGetUniformLocation(s_shader, "uTex");
+        glUseProgram(s_shader);
+        if (uTexLoc >= 0) glUniform1i(uTexLoc, 0);
+        glUseProgram(0);
+    }
+    return true;
+}
+
+void Text::shutdown_renderer()
+{
+    // Not used; kept for completeness if later needed.
+}
+
+int Text::pixel_size_for_level() const
+{
+    // Map 1..10 to pixel sizes ~ 18..72 (tunable)
+    // Ensures readable sizes and crispness (we rasterize at exact pixel size)
+    const int base = 18;
+    const int step = 6;
+    return base + (m_size_level - 1) * step; // 18,24,30,...,72
+}
+
+float Text::pixel_x_from_pos() const {
+    if (m_pos_is_percent) return (s_fb_width > 0 ? (m_pos_x * 0.01f * s_fb_width) : m_pos_x);
+    return m_pos_x;
+}
+
+float Text::pixel_y_from_pos() const {
+    if (m_pos_is_percent) return (s_fb_height > 0 ? (m_pos_y * 0.01f * s_fb_height) : m_pos_y);
+    return m_pos_y;
+}
+
+bool Text::ensure_font_loaded() const
+{
+    if (m_font_ready) return true;
+    if (m_font_path.empty()) {
+        std::fprintf(stderr, "[Text] No font path set. Call set_text_font().\n");
+        return false;
+    }
+    if (!init_renderer()) return false;
+
+    const int px = pixel_size_for_level();
+    FontKey key{m_font_path, px};
+    auto it = s_glyph_cache.find(key);
+    if (it != s_glyph_cache.end()) {
+        m_font_ready = true;
+        return true;
+    }
+
+    // Load face
+    FT_Library lib = reinterpret_cast<FT_Library>(s_ft_library);
+    FT_Face face = nullptr;
+    if (FT_New_Face(lib, m_font_path.c_str(), 0, &face) != 0) {
+        std::fprintf(stderr, "[Text] Failed to load font face: %s\n", m_font_path.c_str());
+        return false;
+    }
+    FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(px));
+
+    // Setup GL unpack alignment for single channel glyph bitmaps
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    GlyphMap glyphs;
+    glyphs.reserve(96);
+
+    // ASCII range 32..126 (printables)
+    for (unsigned long c = 32; c <= 126; ++c) {
+        if (FT_Load_Char(face, static_cast<FT_ULong>(c), FT_LOAD_RENDER) != 0) {
+            std::fprintf(stderr, "[Text] FT_Load_Char failed for '%c' (U+%lu)\n", (char)c, c);
+            continue;
+        }
+        FT_GlyphSlot g = face->glyph;
+
+        unsigned int tex = 0;
+        glGenTextures(1, &tex);
+        glBindTexture(GL_TEXTURE_2D, tex);
+        // Store grayscale in RED channel
+        glTexImage2D(
+            GL_TEXTURE_2D,
+            0,
+            GL_R8,
+            g->bitmap.width,
+            g->bitmap.rows,
+            0,
+            GL_RED,
+            GL_UNSIGNED_BYTE,
+            g->bitmap.buffer
+        );
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        // Swizzle: replicate RED in all components so sampling .r returns coverage
+        GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
+        glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
+
+        Glyph ch;
+        ch.texture_id = tex;
+        ch.width = g->bitmap.width;
+        ch.height = g->bitmap.rows;
+        ch.bearing_x = g->bitmap_left;
+        ch.bearing_y = g->bitmap_top;
+        ch.advance = static_cast<unsigned int>(g->advance.x);
+
+        glyphs.emplace(c, ch);
+    }
+
+    FT_Done_Face(face);
+
+    s_glyph_cache.emplace(std::move(key), std::move(glyphs));
+    m_font_ready = true;
+    return true;
+}
+
+void Text::draw() const
+{
+    if (!m_visible) return;
+    if (m_text.empty()) return;
+    if (!ensure_font_loaded()) return;
+    if (!init_renderer()) return;
+
+    // Ensure we have framebuffer size (if user didn't notify via on_framebuffer_resized)
+    if (s_fb_width <= 0 || s_fb_height <= 0) {
+        GLint vp[4] = {0,0,0,0};
+        glGetIntegerv(GL_VIEWPORT, vp);
+        s_fb_width = vp[2];
+        s_fb_height = vp[3];
+    }
+
+    float proj[16];
+    make_ortho(0.0f, static_cast<float>(s_fb_width), 0.0f, static_cast<float>(s_fb_height), -1.0f, 1.0f, proj);
+
+    // Get glyph cache for current font+size
+    const int px = pixel_size_for_level();
+    FontKey key{m_font_path, px};
+    auto it = s_glyph_cache.find(key);
+    if (it == s_glyph_cache.end()) return; // should not happen
+    const GlyphMap& glyphs = it->second;
+
+    // Compute starting pen position
+    float x = pixel_x_from_pos();
+    float y = pixel_y_from_pos();
+
+    // Render setup
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
+    if (depthWasEnabled) glDisable(GL_DEPTH_TEST); // HUD overlay
+
+    glActiveTexture(GL_TEXTURE0);
+    glUseProgram(s_shader);
+    glUniformMatrix4fv(s_uProjLoc, 1, GL_FALSE, proj);
+    glUniform4fv(s_uTextColorLoc, 1, m_color);
+
+    glBindVertexArray(s_vao);
+    glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
+
+    float pen_x = x;
+    float baseline_y = y; // y is baseline
+
+    for (unsigned char ch : m_text) {
+        auto ig = glyphs.find(ch);
+        if (ig == glyphs.end()) continue;
+        const Glyph& g = ig->second;
+
+        float xpos = pen_x + static_cast<float>(g.bearing_x);
+        float ypos = baseline_y - static_cast<float>(g.height - g.bearing_y);
+        float w = static_cast<float>(g.width);
+        float h = static_cast<float>(g.height);
+
+        // 6 vertices (2 triangles) with x,y,u,v
+        float verts[6][4] = {
+            { xpos,     ypos + h, 0.0f, 0.0f },
+            { xpos,     ypos,     0.0f, 1.0f },
+            { xpos + w, ypos,     1.0f, 1.0f },
+
+            { xpos,     ypos + h, 0.0f, 0.0f },
+            { xpos + w, ypos,     1.0f, 1.0f },
+            { xpos + w, ypos + h, 1.0f, 0.0f },
+        };
+
+        glBindTexture(GL_TEXTURE_2D, g.texture_id);
+        glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+
+        pen_x += static_cast<float>(g.advance >> 6);
+    }
+
+    glBindVertexArray(0);
+    glUseProgram(0);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    if (depthWasEnabled) glEnable(GL_DEPTH_TEST);
+}
