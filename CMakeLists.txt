@@ -74,8 +74,11 @@ endif()
 
 add_executable(MGE_XLR
   src/main.cpp
-  src/text/Text.cpp
-  src/text/Text.h
+  src/gui/GuiElement.h
+  src/gui/GuiText.cpp
+  src/gui/GuiText.h
+  src/gui/GuiPanel.cpp
+  src/gui/GuiPanel.h
 )
 
 # Define shader directory at compile time (absolute path, forward slashes)

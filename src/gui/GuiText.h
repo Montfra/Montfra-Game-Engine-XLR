@@ -1,34 +1,36 @@
-// Text.h - Simple 2D Text rendering with FreeType + OpenGL 3.3
+// GuiText.h - 2D Text rendering with FreeType + OpenGL 3.3
 #pragma once
 
 #include <string>
 #include <unordered_map>
 #include <memory>
+#include "GuiElement.h"
 
-struct GLFWwindow; // forward decl (not required but handy if extended)
-
-// Public API: Text class for HUD/menus overlay rendering.
+// Public API: GuiText class for HUD/menus overlay rendering.
 // Coordinates are in screen pixels by default (origin at bottom-left),
 // or as percentage of framebuffer size when in_percentage = true.
-class Text {
+class GuiText : public GuiElement {
 public:
-    Text();
-    ~Text();
+    GuiText();
+    ~GuiText();
 
     // Core setters
-    void set_position(float x, float y, bool in_percentage = false);
+    void set_position(float x, float y, bool in_percentage = false); // override position handling
     void set_text(const std::string& str);
     bool set_text_font(const std::string& font_path); // returns true on success
     void set_text_size(int size_1_to_10);             // relative scale 1..10
     void set_text_color(float r, float g, float b, float a);
-    
+
     // Optional helpers
     void show();
     void hide();
     bool visible() const { return m_visible; }
 
     // Draw the text. Requires a current OpenGL context.
-    void draw() const;
+    void draw() override;
+
+    // Preferred size (in pixels) based on current text and font/size
+    std::pair<float,float> preferred_size() const override;
 
     // Allow dynamic update on framebuffer resize if needed in future.
     static void on_framebuffer_resized(int fb_width, int fb_height);
@@ -42,6 +44,7 @@ private:
     float pixel_x_from_pos() const; // computes pixel x from pos/percent
     float pixel_y_from_pos() const; // computes pixel y from pos/percent
     int   pixel_size_for_level() const; // maps 1..10 to pixel size
+    float text_width_pixels() const;    // measured width based on glyph advances
 
     // Data
     std::string m_text;
@@ -50,12 +53,7 @@ private:
     int  m_size_level = 5; // 1..10
     float m_color[4] = {1.f, 1.f, 1.f, 1.f};
 
-    float m_pos_x = 0.f; // either pixels or percentage
-    float m_pos_y = 0.f;
-    bool  m_pos_is_percent = false;
-    bool  m_visible = true;
-
-    // Rendering backend (shared between all Text instances)
+    // Rendering backend (shared between all GuiText instances)
     struct Glyph {
         unsigned int texture_id = 0; // GL texture
         int width = 0;
@@ -75,7 +73,6 @@ private:
 
     struct FontKeyHash {
         std::size_t operator()(const FontKey& k) const noexcept {
-            // simple combination
             std::hash<std::string> h;
             return (h(k.path) ^ (static_cast<std::size_t>(k.pixel_size) * 1315423911u));
         }
@@ -99,3 +96,4 @@ private:
     static int s_fb_width;
     static int s_fb_height;
 };
+

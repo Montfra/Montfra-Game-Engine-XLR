@@ -6,7 +6,8 @@
 
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
-#include "text/Text.h"
+#include "gui/GuiText.h"
+#include "gui/GuiPanel.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -184,19 +185,15 @@ int main()
         return std::string();
     };
 
-    Text hud;
+    GuiText hud;
     hud.set_text("MGE-XLR");
     hud.set_text_size(4);
-    hud.set_text_color(0.8f, 0.8f, 0.8f, 0.5f);
-    hud.set_position(0.0f, 20.0f, false); // 2% from left, 95% height (near top)
-    // Alignement et z-index non utilisés dans cette version simplifiée
-    
-    Text hud2;
-    hud2.set_text("v0.2");
+    hud.set_text_color(0.9f, 0.9f, 0.95f, 0.95f);
+
+    GuiText hud2;
+    hud2.set_text("v0.3");
     hud2.set_text_size(2);
-    hud2.set_text_color(1.0f, 0.5f, 0.4f, 1.0f);
-    hud2.set_position(0.0f, 0.0f, false); // 2% from left, 95% height (near top)
-    // Version simplifiée: pas d'alignement ni z-index
+    hud2.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
 
     {
         std::string font_path = choose_default_font();
@@ -208,11 +205,64 @@ int main()
             hud2.set_text_font("resources/Jersey25-Regular.ttf");
         }
     }
-    
     hud.set_text_font("resources/Jersey25-Regular.ttf");
     hud2.set_text_font("resources/Jersey25-Regular.ttf");
+
+    // Crée un panneau pour contenir les textes (HUD container)
+    GuiPanel panel;
+    panel.set_position(20.0f, 20.0f, false); // bottom-left corner
+    panel.set_size(170.0f, 64.0f, false);
+    panel.setBackgroundColor(0.05f, 0.05f, 0.06f, 0.75f);
+    panel.setBorderColor(0.9f, 0.9f, 0.95f, 0.25f);
+    panel.setBorderRadius(8.0f);
+    panel.setBorderThickness(1.5f);
+    panel.setLayout(GuiPanel::LayoutType::VERTICAL);
+    panel.setPadding(0.0f);
+    panel.setSpacing(0.0f);
+    panel.addChild(&hud);
+    panel.addChild(&hud2);
     
-    // Version simplifiée: pas de centrage via alignement
+    
+    
+    GuiText hud3;
+    hud3.set_text("Panel1");
+    hud3.set_text_size(2);
+    hud3.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
+    hud3.set_text_font("resources/Jersey25-Regular.ttf");
+    
+    GuiText hud4;
+    hud4.set_text("Panel2");
+    hud4.set_text_size(2);
+    hud4.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
+    hud4.set_text_font("resources/Jersey25-Regular.ttf");
+    
+    GuiPanel panel1;
+    panel1.set_position(10.0f, 70.0f, true); // bottom-left corner
+    panel1.set_size(20.0f, 20.0f, true);
+    panel1.setBackgroundColor(0.15f, 0.5f, 0.06f, 0.75f);
+    panel1.setBorderColor(0.2f, 0.9f, 0.95f, 0.25f);
+    panel1.setBorderRadius(3.0f);
+    panel1.setBorderThickness(1.0f);
+    panel1.setLayout(GuiPanel::LayoutType::HORIZONTAL);
+    panel1.setPadding(5.0f);
+    panel1.setSpacing(5.0f);
+    panel1.addChild(&hud3);
+    
+    
+    GuiPanel panel2;
+    panel2.set_position(10.0f, 80.0f, true); // bottom-left corner
+    panel2.set_size(10.0f, 10.0f, true);
+    panel2.setBackgroundColor(0.15f, 0.8f, 0.6f, 0.75f);
+    panel2.setBorderColor(0.1f, 0.02f, 0.55f, 0.25f);
+    panel2.setBorderRadius(9.0f);
+    panel2.setBorderThickness(5.0f);
+    panel2.setLayout(GuiPanel::LayoutType::VERTICAL);
+    panel2.setPadding(0.0f);
+    panel2.setSpacing(0.0f);
+    panel2.addChild(&hud4);
+    
+    panel1.addChild(&panel2);
+    
 
     // 7) Boucle principale
     while (!glfwWindowShouldClose(window)) {
@@ -234,10 +284,9 @@ int main()
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        // Dessin du texte HUD (overlay 2D)
-        hud.draw();
-        hud2.draw();
-        hud.draw();
+        // Dessin du panneau (dessine aussi les enfants)
+        panel.draw();
+        panel1.draw();
 
         glfwSwapBuffers(window);
     }
@@ -281,7 +330,7 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height)
     // Important : utiliser la taille du framebuffer (pixels), pas celle de la fenêtre (points)
     glViewport(0, 0, width, height);
     // Notifier le module texte pour recalculer la projection orthographique
-    Text::on_framebuffer_resized(width, height);
+    GuiText::on_framebuffer_resized(width, height);
 }
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)

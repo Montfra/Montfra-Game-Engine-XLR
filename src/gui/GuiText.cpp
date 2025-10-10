@@ -1,6 +1,6 @@
-// Text.cpp - Implementation of Text class using FreeType and OpenGL
+// GuiText.cpp - Implementation of GuiText using FreeType and OpenGL
 
-#include "Text.h"
+#include "GuiText.h"
 
 #include <glad/glad.h>
 
@@ -13,15 +13,15 @@
 #include <cmath>
 
 // Static storage
-std::unordered_map<Text::FontKey, Text::GlyphMap, Text::FontKeyHash> Text::s_glyph_cache;
-unsigned int Text::s_vao = 0;
-unsigned int Text::s_vbo = 0;
-unsigned int Text::s_shader = 0;
-int Text::s_uProjLoc = -1;
-int Text::s_uTextColorLoc = -1;
-void* Text::s_ft_library = nullptr; // FT_Library
-int Text::s_fb_width = 0;
-int Text::s_fb_height = 0;
+std::unordered_map<GuiText::FontKey, GuiText::GlyphMap, GuiText::FontKeyHash> GuiText::s_glyph_cache;
+unsigned int GuiText::s_vao = 0;
+unsigned int GuiText::s_vbo = 0;
+unsigned int GuiText::s_shader = 0;
+int GuiText::s_uProjLoc = -1;
+int GuiText::s_uTextColorLoc = -1;
+void* GuiText::s_ft_library = nullptr; // FT_Library
+int GuiText::s_fb_width = 0;
+int GuiText::s_fb_height = 0;
 
 namespace {
 
@@ -49,7 +49,7 @@ static unsigned int compile_shader(GLenum type, const char* src)
         GLint len = 0; glGetShaderiv(sh, GL_INFO_LOG_LENGTH, &len);
         std::string log(len > 0 ? len : 1, '\0');
         glGetShaderInfoLog(sh, len, nullptr, log.data());
-        std::fprintf(stderr, "[Text] Shader compile error (%s):\n%s\n", type==GL_VERTEX_SHADER?"VERTEX":"FRAGMENT", log.c_str());
+        std::fprintf(stderr, "[GuiText] Shader compile error (%s):\n%s\n", type==GL_VERTEX_SHADER?"VERTEX":"FRAGMENT", log.c_str());
         glDeleteShader(sh);
         return 0;
     }
@@ -68,7 +68,7 @@ static unsigned int link_program(GLuint vs, GLuint fs)
         GLint len = 0; glGetProgramiv(p, GL_INFO_LOG_LENGTH, &len);
         std::string log(len > 0 ? len : 1, '\0');
         glGetProgramInfoLog(p, len, nullptr, log.data());
-        std::fprintf(stderr, "[Text] Program link error:\n%s\n", log.c_str());
+        std::fprintf(stderr, "[GuiText] Program link error:\n%s\n", log.c_str());
         glDeleteProgram(p);
         return 0;
     }
@@ -77,24 +77,24 @@ static unsigned int link_program(GLuint vs, GLuint fs)
 
 } // namespace
 
-Text::Text() { /* lazy init in draw */ }
-Text::~Text() { /* glyph cache persists for process lifetime */ }
+GuiText::GuiText() { /* lazy init in draw */ }
+GuiText::~GuiText() { /* glyph cache persists for process lifetime */ }
 
-void Text::set_position(float x, float y, bool in_percentage) {
-    m_pos_x = x; m_pos_y = y; m_pos_is_percent = in_percentage;
+void GuiText::set_position(float x, float y, bool in_percentage) {
+    GuiElement::set_position(x, y, in_percentage);
 }
 
-void Text::set_text(const std::string& str) {
+void GuiText::set_text(const std::string& str) {
     m_text = str;
 }
 
-bool Text::set_text_font(const std::string& font_path) {
+bool GuiText::set_text_font(const std::string& font_path) {
     m_font_path = font_path;
-    m_font_ready = false; // will load lazily on next draw
+    m_font_ready = false; // will load lazily on next draw or preferred_size
     return true;
 }
 
-void Text::set_text_size(int size_1_to_10) {
+void GuiText::set_text_size(int size_1_to_10) {
     if (size_1_to_10 < 1) size_1_to_10 = 1;
     if (size_1_to_10 > 10) size_1_to_10 = 10;
     if (m_size_level != size_1_to_10) {
@@ -103,21 +103,19 @@ void Text::set_text_size(int size_1_to_10) {
     }
 }
 
-void Text::set_text_color(float r, float g, float b, float a) {
+void GuiText::set_text_color(float r, float g, float b, float a) {
     m_color[0]=r; m_color[1]=g; m_color[2]=b; m_color[3]=a;
 }
 
-// z-index and alignment removed in this simplified version
+void GuiText::show() { m_visible = true; }
+void GuiText::hide() { m_visible = false; }
 
-void Text::show() { m_visible = true; }
-void Text::hide() { m_visible = false; }
-
-void Text::on_framebuffer_resized(int fb_width, int fb_height) {
+void GuiText::on_framebuffer_resized(int fb_width, int fb_height) {
     s_fb_width = fb_width;
     s_fb_height = fb_height;
 }
 
-bool Text::init_renderer()
+bool GuiText::init_renderer()
 {
     if (s_shader != 0 && s_vao != 0 && s_vbo != 0 && s_ft_library != nullptr) return true;
 
@@ -125,7 +123,7 @@ bool Text::init_renderer()
     if (!s_ft_library) {
         FT_Library lib = nullptr;
         if (FT_Init_FreeType(&lib) != 0) {
-            std::fprintf(stderr, "[Text] FreeType init failed.\n");
+            std::fprintf(stderr, "[GuiText] FreeType init failed.\n");
             return false;
         }
         s_ft_library = lib;
@@ -184,35 +182,33 @@ bool Text::init_renderer()
     return true;
 }
 
-void Text::shutdown_renderer()
+void GuiText::shutdown_renderer()
 {
     // Not used; kept for completeness if later needed.
 }
 
-int Text::pixel_size_for_level() const
+int GuiText::pixel_size_for_level() const
 {
-    // Map 1..10 to pixel sizes ~ 18..72 (tunable)
-    // Ensures readable sizes and crispness (we rasterize at exact pixel size)
     const int base = 18;
     const int step = 6;
     return base + (m_size_level - 1) * step; // 18,24,30,...,72
 }
 
-float Text::pixel_x_from_pos() const {
+float GuiText::pixel_x_from_pos() const {
     if (m_pos_is_percent) return (s_fb_width > 0 ? (m_pos_x * 0.01f * s_fb_width) : m_pos_x);
     return m_pos_x;
 }
 
-float Text::pixel_y_from_pos() const {
+float GuiText::pixel_y_from_pos() const {
     if (m_pos_is_percent) return (s_fb_height > 0 ? (m_pos_y * 0.01f * s_fb_height) : m_pos_y);
     return m_pos_y;
 }
 
-bool Text::ensure_font_loaded() const
+bool GuiText::ensure_font_loaded() const
 {
     if (m_font_ready) return true;
     if (m_font_path.empty()) {
-        std::fprintf(stderr, "[Text] No font path set. Call set_text_font().\n");
+        std::fprintf(stderr, "[GuiText] No font path set. Call set_text_font().\n");
         return false;
     }
     if (!init_renderer()) return false;
@@ -229,7 +225,7 @@ bool Text::ensure_font_loaded() const
     FT_Library lib = reinterpret_cast<FT_Library>(s_ft_library);
     FT_Face face = nullptr;
     if (FT_New_Face(lib, m_font_path.c_str(), 0, &face) != 0) {
-        std::fprintf(stderr, "[Text] Failed to load font face: %s\n", m_font_path.c_str());
+        std::fprintf(stderr, "[GuiText] Failed to load font face: %s\n", m_font_path.c_str());
         return false;
     }
     FT_Set_Pixel_Sizes(face, 0, static_cast<FT_UInt>(px));
@@ -243,7 +239,7 @@ bool Text::ensure_font_loaded() const
     // ASCII range 32..126 (printables)
     for (unsigned long c = 32; c <= 126; ++c) {
         if (FT_Load_Char(face, static_cast<FT_ULong>(c), FT_LOAD_RENDER) != 0) {
-            std::fprintf(stderr, "[Text] FT_Load_Char failed for '%c' (U+%lu)\n", (char)c, c);
+            std::fprintf(stderr, "[GuiText] FT_Load_Char failed for '%c' (U+%lu)\n", (char)c, c);
             continue;
         }
         FT_GlyphSlot g = face->glyph;
@@ -269,7 +265,6 @@ bool Text::ensure_font_loaded() const
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-        // Swizzle: replicate RED in all components so sampling .r returns coverage
         GLint swizzleMask[] = {GL_RED, GL_RED, GL_RED, GL_RED};
         glTexParameteriv(GL_TEXTURE_2D, GL_TEXTURE_SWIZZLE_RGBA, swizzleMask);
 
@@ -291,7 +286,34 @@ bool Text::ensure_font_loaded() const
     return true;
 }
 
-void Text::draw() const
+float GuiText::text_width_pixels() const
+{
+    if (m_text.empty()) return 0.0f;
+    if (!ensure_font_loaded()) return 0.0f;
+    const int px = pixel_size_for_level();
+    FontKey key{m_font_path, px};
+    auto it = s_glyph_cache.find(key);
+    if (it == s_glyph_cache.end()) return 0.0f;
+    const GlyphMap& glyphs = it->second;
+    float width = 0.0f;
+    for (unsigned char ch : m_text) {
+        auto ig = glyphs.find(ch);
+        if (ig == glyphs.end()) continue;
+        const Glyph& g = ig->second;
+        width += static_cast<float>(g.advance >> 6);
+    }
+    return width;
+}
+
+std::pair<float,float> GuiText::preferred_size() const
+{
+    // width = sum of advances, height = pixel size
+    float w = text_width_pixels();
+    float h = static_cast<float>(pixel_size_for_level());
+    return {w, h};
+}
+
+void GuiText::draw()
 {
     if (!m_visible) return;
     if (m_text.empty()) return;
@@ -309,18 +331,15 @@ void Text::draw() const
     float proj[16];
     make_ortho(0.0f, static_cast<float>(s_fb_width), 0.0f, static_cast<float>(s_fb_height), -1.0f, 1.0f, proj);
 
-    // Get glyph cache for current font+size
     const int px = pixel_size_for_level();
     FontKey key{m_font_path, px};
     auto it = s_glyph_cache.find(key);
     if (it == s_glyph_cache.end()) return; // should not happen
     const GlyphMap& glyphs = it->second;
 
-    // Compute starting pen position
     float x = pixel_x_from_pos();
     float y = pixel_y_from_pos();
 
-    // Render setup
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     GLboolean depthWasEnabled = glIsEnabled(GL_DEPTH_TEST);
@@ -347,7 +366,6 @@ void Text::draw() const
         float w = static_cast<float>(g.width);
         float h = static_cast<float>(g.height);
 
-        // 6 vertices (2 triangles) with x,y,u,v
         float verts[6][4] = {
             { xpos,     ypos + h, 0.0f, 0.0f },
             { xpos,     ypos,     0.0f, 1.0f },
@@ -371,3 +389,4 @@ void Text::draw() const
 
     if (depthWasEnabled) glEnable(GL_DEPTH_TEST);
 }
+
