@@ -11,6 +11,7 @@
 #include <cstdio>
 #include <cstdint>
 #include <cmath>
+#include <algorithm>
 
 // Static storage
 std::unordered_map<GuiText::FontKey, GuiText::GlyphMap, GuiText::FontKeyHash> GuiText::s_glyph_cache;
@@ -313,6 +314,35 @@ std::pair<float,float> GuiText::preferred_size() const
     return {w, h};
 }
 
+bool GuiText::vertical_extents(float& ascent, float& descent) const
+{
+    ascent = 0.0f; descent = 0.0f;
+    if (m_text.empty()) return false;
+    if (!ensure_font_loaded()) return false;
+
+    const int px = pixel_size_for_level();
+    FontKey key{m_font_path, px};
+    auto it = s_glyph_cache.find(key);
+    if (it == s_glyph_cache.end()) return false;
+    const GlyphMap& glyphs = it->second;
+
+    float a = 0.0f, d = 0.0f;
+    for (unsigned char ch : m_text) {
+        auto ig = glyphs.find(ch);
+        if (ig == glyphs.end()) continue;
+        const Glyph& g = ig->second;
+        a = std::max(a, static_cast<float>(g.bearing_y));
+        d = std::max(d, static_cast<float>(g.height - g.bearing_y));
+    }
+    if (a == 0.0f && d == 0.0f) {
+        // Fallback heuristic: typical ascent/descent split
+        a = px * 0.8f;
+        d = px * 0.2f;
+    }
+    ascent = a; descent = d;
+    return true;
+}
+
 void GuiText::draw()
 {
     if (!m_visible) return;
@@ -389,4 +419,3 @@ void GuiText::draw()
 
     if (depthWasEnabled) glEnable(GL_DEPTH_TEST);
 }
-

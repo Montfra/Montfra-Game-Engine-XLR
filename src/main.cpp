@@ -8,6 +8,7 @@
 #include <GLFW/glfw3.h>
 #include "gui/GuiText.h"
 #include "gui/GuiPanel.h"
+#include "gui/GuiButton.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -33,6 +34,9 @@ GLFWwindow* create_window(int w, int h, const char* title);
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods);
 void toggle_fullscreen(GLFWwindow* window);
+// Forward input to GuiButton
+void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos);
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
 
 std::string load_text_file(const std::string& path);
 GLuint compile_shader(GLenum type, const std::string& src);
@@ -108,6 +112,8 @@ int main()
     // 4) Callbacks
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetKeyCallback(window, key_callback);
+    glfwSetCursorPosCallback(window, cursor_pos_callback);
+    glfwSetMouseButtonCallback(window, mouse_button_callback);
 
     // 5) Géométrie simple (triangle)
     const float vertices[] = {
@@ -211,16 +217,28 @@ int main()
     // Crée un panneau pour contenir les textes (HUD container)
     GuiPanel panel;
     panel.set_position(20.0f, 20.0f, false); // bottom-left corner
-    panel.set_size(170.0f, 64.0f, false);
+    panel.set_size(200.0f, 120.0f, false);
     panel.setBackgroundColor(0.05f, 0.05f, 0.06f, 0.75f);
     panel.setBorderColor(0.9f, 0.9f, 0.95f, 0.25f);
     panel.setBorderRadius(8.0f);
     panel.setBorderThickness(1.5f);
     panel.setLayout(GuiPanel::LayoutType::VERTICAL);
     panel.setPadding(0.0f);
-    panel.setSpacing(0.0f);
+    panel.setSpacing(4.0f);
     panel.addChild(&hud);
     panel.addChild(&hud2);
+
+    // Button in the same panel
+    GuiButton button;
+    button.set_text("Clique moi :)");
+    button.set_text_font("resources/Jersey25-Regular.ttf");
+    button.set_text_size(3);
+    button.set_bg_color(0.20f, 0.25f, 0.35f, 0.90f);
+    button.set_hover_color(0.30f, 0.40f, 0.55f, 0.95f);
+    button.set_padding(10.0f, 6.0f);
+    button.set_corner_radius(6.0f);
+    button.set_on_click([](){ std::puts("Click"); });
+    panel.addChild(&button);
     
     
     
@@ -266,6 +284,8 @@ int main()
 
     // 7) Boucle principale
     while (!glfwWindowShouldClose(window)) {
+        // Reset input one-shot flags, then poll events to fill them
+        GuiButton::begin_frame();
         glfwPollEvents();
 
         // Calcul projection responsive à chaque frame (aspect peut changer)
@@ -331,6 +351,17 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height)
     glViewport(0, 0, width, height);
     // Notifier le module texte pour recalculer la projection orthographique
     GuiText::on_framebuffer_resized(width, height);
+}
+
+void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
+{
+    GuiButton::glfw_cursor_pos_callback(window, xpos, ypos);
+}
+
+void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
+{
+    (void)window; (void)mods;
+    GuiButton::glfw_mouse_button_callback(window, button, action, mods);
 }
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)

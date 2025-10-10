@@ -32,6 +32,12 @@ public:
     // Preferred size (in pixels) based on current text and font/size
     std::pair<float,float> preferred_size() const override;
 
+    // Compute vertical extents of the current text in pixels relative to the baseline.
+    // - ascent: max distance above baseline
+    // - descent: max distance below baseline
+    // Returns false if font/text not ready; outputs are zeroed.
+    bool vertical_extents(float& ascent, float& descent) const;
+
     // Allow dynamic update on framebuffer resize if needed in future.
     static void on_framebuffer_resized(int fb_width, int fb_height);
 
@@ -96,4 +102,3 @@ private:
     static int s_fb_width;
     static int s_fb_height;
 };
-
