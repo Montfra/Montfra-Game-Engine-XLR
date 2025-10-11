@@ -9,6 +9,13 @@
 #include "gui/GuiText.h"
 #include "gui/GuiPanel.h"
 #include "gui/GuiButton.h"
+#include "gui/GuiInput.h"
+#include "gui/GuiImage.h"
+#include "gui/GuiInputText.h"
+#include "gui/GuiSlider.h"
+#include "gui/GuiCheckbox.h"
+#include "gui/GuiProgressBar.h"
+#include "gui/GuiMenuBar.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -37,6 +44,7 @@ void toggle_fullscreen(GLFWwindow* window);
 // Forward input to GuiButton
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos);
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods);
+void char_callback(GLFWwindow* window, unsigned int codepoint);
 
 std::string load_text_file(const std::string& path);
 GLuint compile_shader(GLenum type, const std::string& src);
@@ -114,6 +122,7 @@ int main()
     glfwSetKeyCallback(window, key_callback);
     glfwSetCursorPosCallback(window, cursor_pos_callback);
     glfwSetMouseButtonCallback(window, mouse_button_callback);
+    glfwSetCharCallback(window, char_callback);
 
     // 5) Géométrie simple (triangle)
     const float vertices[] = {
@@ -196,11 +205,6 @@ int main()
     hud.set_text_size(4);
     hud.set_text_color(0.9f, 0.9f, 0.95f, 0.95f);
 
-    GuiText hud2;
-    hud2.set_text("v0.3");
-    hud2.set_text_size(2);
-    hud2.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
-
     {
         std::string font_path = choose_default_font();
         if (font_path.empty()) {
@@ -208,84 +212,75 @@ int main()
                                  "       Utilisez set_text_font() avec un chemin .ttf/.otf.\n");
         } else {
             hud.set_text_font(font_path);
-            hud2.set_text_font("resources/Jersey25-Regular.ttf");
         }
     }
     hud.set_text_font("resources/Jersey25-Regular.ttf");
-    hud2.set_text_font("resources/Jersey25-Regular.ttf");
 
     // Crée un panneau pour contenir les textes (HUD container)
+    // Demo GUI Panel containing all new widgets
     GuiPanel panel;
-    panel.set_position(20.0f, 20.0f, false); // bottom-left corner
-    panel.set_size(200.0f, 120.0f, false);
+    panel.set_position(20.0f, 20.0f, false);
+    panel.set_size(540.0f, 380.0f, false);
     panel.setBackgroundColor(0.05f, 0.05f, 0.06f, 0.75f);
     panel.setBorderColor(0.9f, 0.9f, 0.95f, 0.25f);
     panel.setBorderRadius(8.0f);
     panel.setBorderThickness(1.5f);
     panel.setLayout(GuiPanel::LayoutType::VERTICAL);
-    panel.setPadding(0.0f);
-    panel.setSpacing(4.0f);
-    panel.addChild(&hud);
-    panel.addChild(&hud2);
+    panel.setPadding(6.0f);
+    panel.setSpacing(8.0f);
 
-    // Button in the same panel
-    GuiButton button;
-    button.set_text("Clique moi :)");
-    button.set_text_font("resources/Jersey25-Regular.ttf");
-    button.set_text_size(3);
-    button.set_bg_color(0.20f, 0.25f, 0.35f, 0.90f);
-    button.set_hover_color(0.30f, 0.40f, 0.55f, 0.95f);
-    button.set_padding(10.0f, 6.0f);
-    button.set_corner_radius(6.0f);
-    button.set_on_click([](){ std::puts("Click"); });
-    panel.addChild(&button);
-    
-    
-    
-    GuiText hud3;
-    hud3.set_text("Panel1");
-    hud3.set_text_size(2);
-    hud3.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
-    hud3.set_text_font("resources/Jersey25-Regular.ttf");
-    
-    GuiText hud4;
-    hud4.set_text("Panel2");
-    hud4.set_text_size(2);
-    hud4.set_text_color(1.0f, 0.6f, 0.3f, 1.0f);
-    hud4.set_text_font("resources/Jersey25-Regular.ttf");
-    
-    GuiPanel panel1;
-    panel1.set_position(10.0f, 70.0f, true); // bottom-left corner
-    panel1.set_size(20.0f, 20.0f, true);
-    panel1.setBackgroundColor(0.15f, 0.5f, 0.06f, 0.75f);
-    panel1.setBorderColor(0.2f, 0.9f, 0.95f, 0.25f);
-    panel1.setBorderRadius(3.0f);
-    panel1.setBorderThickness(1.0f);
-    panel1.setLayout(GuiPanel::LayoutType::HORIZONTAL);
-    panel1.setPadding(5.0f);
-    panel1.setSpacing(5.0f);
-    panel1.addChild(&hud3);
-    
-    
-    GuiPanel panel2;
-    panel2.set_position(10.0f, 80.0f, true); // bottom-left corner
-    panel2.set_size(10.0f, 10.0f, true);
-    panel2.setBackgroundColor(0.15f, 0.8f, 0.6f, 0.75f);
-    panel2.setBorderColor(0.1f, 0.02f, 0.55f, 0.25f);
-    panel2.setBorderRadius(9.0f);
-    panel2.setBorderThickness(5.0f);
-    panel2.setLayout(GuiPanel::LayoutType::VERTICAL);
-    panel2.setPadding(0.0f);
-    panel2.setSpacing(0.0f);
-    panel2.addChild(&hud4);
-    
-    panel1.addChild(&panel2);
+    // MenuBar inside panel
+    GuiMenuBar menubar;
+    menubar.set_text_font("resources/Jersey25-Regular.ttf");
+    menubar.set_text_size(3);
+    menubar.add_menu("Fichier");
+    menubar.add_menu_item("Fichier", "Nouveau", [](){ std::puts("Menu: Fichier > Nouveau"); });
+    menubar.add_menu_item("Fichier", "Ouvrir", [](){ std::puts("Menu: Fichier > Ouvrir"); });
+    menubar.add_menu_item("Fichier", "Quitter", [](){ std::puts("Menu: Fichier > Quitter"); });
+    panel.addChild(&menubar);
+
+    // Title text
+    panel.addChild(&hud);
+
+    // InputText with placeholder
+    GuiInputText input;
+    input.set_text_font("resources/Jersey25-Regular.ttf");
+    input.set_text_size(3);
+    input.set_placeholder("Tapez votre nom...");
+    input.set_on_text_change([](const std::string& s){ std::printf("[Input] text=""%s""\n", s.c_str()); });
+    panel.addChild(&input);
+
+    // Image
+    GuiImage image;
+    image.set_texture("resources/icon.ppm");
+    image.set_size(64, 64);
+    panel.addChild(&image);
+
+    // Slider controlling value shown in text
+    GuiText value_text; value_text.set_text_font("resources/Jersey25-Regular.ttf"); value_text.set_text_size(3); value_text.set_text_color(0.9f,0.9f,0.95f,1.0f);
+    value_text.set_text("Slider: 0.0");
+    GuiSlider slider; slider.set_range(0.0f, 100.0f); slider.set_value(0.0f);
+    slider.set_on_value_changed([&](float v){ char buf[64]; std::snprintf(buf, sizeof(buf), "Slider: %.1f", v); value_text.set_text(buf); std::printf("[Slider] value=%.3f\n", v); });
+    panel.addChild(&value_text);
+    panel.addChild(&slider);
+
+    // Checkbox toggling console action
+    GuiCheckbox checkbox; checkbox.set_text_font("resources/Jersey25-Regular.ttf"); checkbox.set_text_size(3); checkbox.set_label("Activer logs");
+    bool logs_enabled = true;
+    checkbox.set_checked(logs_enabled);
+    checkbox.set_on_toggle([&](bool checked){ logs_enabled = checked; std::printf("[Checkbox] logs %s\n", checked?"ON":"OFF"); });
+    panel.addChild(&checkbox);
+
+    // Progress bar updated dynamically
+    GuiProgressBar progress; progress.set_text_font("resources/Jersey25-Regular.ttf"); progress.set_text_size(3);
+    panel.addChild(&progress);
     
 
     // 7) Boucle principale
     while (!glfwWindowShouldClose(window)) {
         // Reset input one-shot flags, then poll events to fill them
-        GuiButton::begin_frame();
+        GuiButton::begin_frame(); // keep old button system in sync if used
+        GuiInput::begin_frame();
         glfwPollEvents();
 
         // Calcul projection responsive à chaque frame (aspect peut changer)
@@ -304,9 +299,15 @@ int main()
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
+        // Update progress for demo
+        {
+            double t = glfwGetTime();
+            float p = static_cast<float>( (std::sin(t)*0.5 + 0.5) * 100.0 );
+            progress.set_progress(p);
+        }
+
         // Dessin du panneau (dessine aussi les enfants)
         panel.draw();
-        panel1.draw();
 
         glfwSwapBuffers(window);
     }
@@ -355,17 +356,25 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height)
 
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
-    GuiButton::glfw_cursor_pos_callback(window, xpos, ypos);
+    GuiInput::glfw_cursor_pos_callback(window, xpos, ypos);
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
-    (void)window; (void)mods;
-    GuiButton::glfw_mouse_button_callback(window, button, action, mods);
+    GuiInput::glfw_mouse_button_callback(window, button, action, mods);
+}
+
+void char_callback(GLFWwindow* window, unsigned int codepoint)
+{
+    (void)window;
+    GuiInput::glfw_char_callback(window, codepoint);
 }
 
 void key_callback(GLFWwindow* window, int key, int /*scancode*/, int action, int /*mods*/)
 {
+    // Forward to GUI input system (records both PRESS and RELEASE)
+    GuiInput::glfw_key_callback(window, key, 0, action, 0);
+
     if (action != GLFW_PRESS)
         return; // on déclenche uniquement au press pour éviter les répétitions
 
