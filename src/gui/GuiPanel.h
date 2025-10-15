@@ -7,7 +7,7 @@
 
 class GuiPanel : public GuiElement {
 public:
-    enum class LayoutType { HORIZONTAL, VERTICAL, GRID };
+    enum class LayoutType { HORIZONTAL, VERTICAL, GRID, ABSOLUTE };
 
     GuiPanel();
     ~GuiPanel();

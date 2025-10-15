@@ -194,11 +194,13 @@ void GuiPanel::draw()
     if (!ensure_gl_resources()) return;
 
     // Determine pixel rect for this panel
-    const float x = pixel_x();
-    const float y = pixel_y();
-    const float w = pixel_w();
-    const float h = pixel_h();
+    float w = pixel_w();
+    float h = pixel_h();
     if (w <= 0.0f || h <= 0.0f) return;
+
+    // Support alignment relative to parent (framebuffer if none)
+    float x = 0.0f, y = 0.0f;
+    compute_aligned_xy(w, h, x, y);
 
     // Render state
     glEnable(GL_BLEND);
@@ -272,8 +274,12 @@ void GuiPanel::layout_children(float x, float y, float w, float h)
                 auto [pw, ph] = child->preferred_size();
                 if (pw <= 0.0f) pw = 0.0f;
                 if (ph <= 0.0f) ph = 0.0f;
-                float py = cy + (ch - ph) * 0.5f; // center vertically
-                child->set_position(pen_x, py, false);
+                // Vertical alignment according to child's alignment inside panel's inner rect
+                child->notify_parent_rect(cx, cy, cw, ch);
+                auto pos = child->aligned_position_in(cx, cy, cw, ch, pw, ph);
+                float px = pen_x;
+                float py = pos.second; // honor vertical anchor
+                child->set_position(px, py, false);
                 child->draw();
                 pen_x += pw + m_spacing;
             }
@@ -287,7 +293,10 @@ void GuiPanel::layout_children(float x, float y, float w, float h)
                 if (pw <= 0.0f) pw = 0.0f;
                 if (ph <= 0.0f) ph = 0.0f;
                 pen_y -= ph; // place this element
-                float px = cx + (cw - pw) * 0.5f; // center horizontally
+                // Horizontal alignment according to child's alignment inside panel's inner rect
+                child->notify_parent_rect(cx, cy, cw, ch);
+                auto pos = child->aligned_position_in(cx, cy, cw, ch, pw, ph);
+                float px = pos.first; // honor horizontal anchor
                 child->set_position(px, pen_y, false);
                 child->draw();
                 pen_y -= m_spacing;
@@ -310,11 +319,28 @@ void GuiPanel::layout_children(float x, float y, float w, float h)
                 float py = cy + ch - (r + 1) * cell_h - r * m_spacing; // top to bottom
                 auto [pw, ph] = child->preferred_size();
                 // center inside cell
-                float cxp = px + (cell_w - pw) * 0.5f;
-                float cyp = py + (cell_h - ph) * 0.5f;
-                child->set_position(cxp, cyp, false);
+                // Use child's alignment inside its cell rect
+                child->notify_parent_rect(px, py, cell_w, cell_h);
+                auto pos = child->aligned_position_in(px, py, cell_w, cell_h, pw, ph);
+                child->set_position(pos.first, pos.second, false);
                 child->draw();
                 ++idx;
+            }
+        } break;
+
+        case LayoutType::ABSOLUTE: {
+            // Children are positioned solely according to their alignment/offset
+            for (auto* child : m_children) {
+                if (!child || !child->visible()) continue;
+                child->notify_parent_rect(cx, cy, cw, ch);
+                auto [pw, ph] = child->preferred_size();
+                // If element has an explicit size, prefer it
+                if (pw <= 0.0f || ph <= 0.0f) {
+                    // keep preferred values; drawers may handle unknown sizes
+                }
+                auto pos = child->aligned_position_in(cx, cy, cw, ch, pw, ph);
+                child->set_position(pos.first, pos.second, false);
+                child->draw();
             }
         } break;
     }

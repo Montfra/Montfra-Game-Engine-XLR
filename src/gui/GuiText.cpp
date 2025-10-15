@@ -367,8 +367,17 @@ void GuiText::draw()
     if (it == s_glyph_cache.end()) return; // should not happen
     const GlyphMap& glyphs = it->second;
 
+    // Determine bounding box from alignment or manual position
     float x = pixel_x_from_pos();
     float y = pixel_y_from_pos();
+    // Prefer bounding box width/height for anchor computation
+    float box_w = text_width_pixels();
+    float box_h = static_cast<float>(pixel_size_for_level());
+    if (position_mode() == PositionMode::Aligned && !m_has_parent) {
+        // Use framebuffer as parent if none was provided
+        // compute_aligned_xy expects bottom-left of the bounding box
+        compute_aligned_xy(box_w, box_h, x, y);
+    }
 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -384,7 +393,12 @@ void GuiText::draw()
     glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
 
     float pen_x = x;
-    float baseline_y = y; // y is baseline
+    float baseline_y = y; // y is currently bottom of bounding box
+    float asc = 0.0f, desc = 0.0f;
+    bool have_extents = vertical_extents(asc, desc);
+    if (have_extents) {
+        baseline_y = y + desc; // move from bottom of box to baseline
+    }
 
     for (unsigned char ch : m_text) {
         auto ig = glyphs.find(ch);

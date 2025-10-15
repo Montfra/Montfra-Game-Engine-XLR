@@ -295,22 +295,29 @@ int main()
     mainMenu.setLayout(GuiPanel::LayoutType::VERTICAL);
     mainMenu.setPadding(10.0f);
     mainMenu.setSpacing(12.0f);
+    // Center the main menu in the window and keep it centered on resize
+    mainMenu.set_alignment(GuiElement::GuiAlignment::Center);
+    mainMenu.set_anchor_offset(0.0f, 0.0f, false);
 
     GuiText titleMain; titleMain.set_text_font("resources/Jersey25-Regular.ttf"); titleMain.set_text_size(6);
     titleMain.set_text("Main Menu"); titleMain.set_text_color(0.95f,0.95f,1.0f,1.0f);
+    titleMain.set_alignment(GuiElement::GuiAlignment::Center);
     mainMenu.addChild(&titleMain);
 
     GuiButton btnPlay; btnPlay.set_text_font("resources/Jersey25-Regular.ttf"); btnPlay.set_text_size(4);
+    btnPlay.set_alignment(GuiElement::GuiAlignment::Center);
     btnPlay.set_text("Play"); btnPlay.set_corner_radius(6.0f);
     btnPlay.set_on_click([](){ std::puts("[Main Menu] Play clicked"); });
     mainMenu.addChild(&btnPlay);
 
     GuiButton btnOptions; btnOptions.set_text_font("resources/Jersey25-Regular.ttf"); btnOptions.set_text_size(4);
+    btnOptions.set_alignment(GuiElement::GuiAlignment::Center);
     btnOptions.set_text("Options"); btnOptions.set_corner_radius(6.0f);
     btnOptions.set_on_click([&guiManager](){ guiManager.setActivePage("Options Menu"); });
     mainMenu.addChild(&btnOptions);
 
     GuiButton btnQuit; btnQuit.set_text_font("resources/Jersey25-Regular.ttf"); btnQuit.set_text_size(4);
+    btnQuit.set_alignment(GuiElement::GuiAlignment::Center);
     btnQuit.set_text("Quit"); btnQuit.set_corner_radius(6.0f);
     btnQuit.set_on_click([&](void){ glfwSetWindowShouldClose(window, GLFW_TRUE); });
     mainMenu.addChild(&btnQuit);
@@ -326,16 +333,21 @@ int main()
     optionsMenu.setLayout(GuiPanel::LayoutType::VERTICAL);
     optionsMenu.setPadding(10.0f);
     optionsMenu.setSpacing(12.0f);
+    optionsMenu.set_alignment(GuiElement::GuiAlignment::Center);
+    optionsMenu.set_anchor_offset(0.0f, 0.0f, false);
 
     GuiText titleOptions; titleOptions.set_text_font("resources/Jersey25-Regular.ttf"); titleOptions.set_text_size(6);
+    titleOptions.set_alignment(GuiElement::GuiAlignment::Center);
     titleOptions.set_text("Options Menu"); titleOptions.set_text_color(0.95f,0.95f,1.0f,1.0f);
     optionsMenu.addChild(&titleOptions);
 
     GuiText optLabel; optLabel.set_text_font("resources/Jersey25-Regular.ttf"); optLabel.set_text_size(4);
+    optLabel.set_alignment(GuiElement::GuiAlignment::Center);
     optLabel.set_text("(Exemple) Réglages à venir...");
     optionsMenu.addChild(&optLabel);
 
     GuiButton btnBack; btnBack.set_text_font("resources/Jersey25-Regular.ttf"); btnBack.set_text_size(4);
+    btnBack.set_alignment(GuiElement::GuiAlignment::Center);
     btnBack.set_text("Back"); btnBack.set_corner_radius(6.0f);
     btnBack.set_on_click([&guiManager](){ guiManager.setActivePage("Main Menu"); });
     optionsMenu.addChild(&btnBack);
@@ -344,6 +356,19 @@ int main()
     guiManager.addPage(mainMenu, "Main Menu");
     guiManager.addPage(optionsMenu, "Options Menu");
     guiManager.setActivePage("Main Menu");
+
+    // Demonstration: free-floating aligned texts anchored to the window
+    GuiText footer; footer.set_text_font("resources/Jersey25-Regular.ttf"); footer.set_text_size(3);
+    footer.set_text_color(0.9f, 0.9f, 0.95f, 1.0f);
+    footer.set_text("Aligned: Bottom Center");
+    footer.set_alignment(GuiElement::GuiAlignment::BottomCenter);
+    footer.set_anchor_offset(0.0f, 12.0f, false); // 12px margin from bottom
+
+    GuiText corner; corner.set_text_font("resources/Jersey25-Regular.ttf"); corner.set_text_size(3);
+    corner.set_text_color(0.9f, 0.9f, 0.95f, 1.0f);
+    corner.set_text("Top Right");
+    corner.set_alignment(GuiElement::GuiAlignment::TopRight);
+    corner.set_anchor_offset(12.0f, 12.0f, false); // 12px margin from top-right
     
 
     // 7) Boucle principale
@@ -379,6 +404,10 @@ int main()
         // Dessin du panneau (désactivé via panel.hide()) puis de la page active
         panel.draw();
         guiManager.draw();
+
+        // Draw free-floating aligned texts (relative to window)
+        footer.draw();
+        corner.draw();
 
         glfwSwapBuffers(window);
     }

@@ -240,6 +240,11 @@ void GuiButton::draw()
     }
     if (w <= 0.0f || h <= 0.0f) return;
 
+    // Apply alignment only when not placed by a container.
+    if (position_mode() == PositionMode::Aligned && !m_has_parent) {
+        compute_aligned_xy(w, h, x, y);
+    }
+
     // Hover/Click detection
     const bool hovered = hit_test(static_cast<float>(s_mouse_x_px), static_cast<float>(s_mouse_y_px), x, y, w, h);
     if (hovered) onHover();
