@@ -16,6 +16,7 @@
 #include "gui/GuiCheckbox.h"
 #include "gui/GuiProgressBar.h"
 #include "gui/GuiMenuBar.h"
+#include "gui/GuiManager.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -274,6 +275,75 @@ int main()
     // Progress bar updated dynamically
     GuiProgressBar progress; progress.set_text_font("resources/Jersey25-Regular.ttf"); progress.set_text_size(3);
     panel.addChild(&progress);
+
+    // --- Désactive l'ancien panneau de démo pour cette démonstration de pages ---
+    panel.hide();
+
+    // -----------------------------
+    // Démo : Gestion de pages GUI
+    // -----------------------------
+    GuiManager guiManager;
+
+    // Page 1: Main Menu
+    GuiPanel mainMenu;
+    mainMenu.set_position(40.0f, 40.0f, false);
+    mainMenu.set_size(460.0f, 300.0f, false);
+    mainMenu.setBackgroundColor(0.05f, 0.05f, 0.06f, 0.80f);
+    mainMenu.setBorderColor(0.9f, 0.9f, 0.95f, 0.25f);
+    mainMenu.setBorderRadius(8.0f);
+    mainMenu.setBorderThickness(1.5f);
+    mainMenu.setLayout(GuiPanel::LayoutType::VERTICAL);
+    mainMenu.setPadding(10.0f);
+    mainMenu.setSpacing(12.0f);
+
+    GuiText titleMain; titleMain.set_text_font("resources/Jersey25-Regular.ttf"); titleMain.set_text_size(6);
+    titleMain.set_text("Main Menu"); titleMain.set_text_color(0.95f,0.95f,1.0f,1.0f);
+    mainMenu.addChild(&titleMain);
+
+    GuiButton btnPlay; btnPlay.set_text_font("resources/Jersey25-Regular.ttf"); btnPlay.set_text_size(4);
+    btnPlay.set_text("Play"); btnPlay.set_corner_radius(6.0f);
+    btnPlay.set_on_click([](){ std::puts("[Main Menu] Play clicked"); });
+    mainMenu.addChild(&btnPlay);
+
+    GuiButton btnOptions; btnOptions.set_text_font("resources/Jersey25-Regular.ttf"); btnOptions.set_text_size(4);
+    btnOptions.set_text("Options"); btnOptions.set_corner_radius(6.0f);
+    btnOptions.set_on_click([&guiManager](){ guiManager.setActivePage("Options Menu"); });
+    mainMenu.addChild(&btnOptions);
+
+    GuiButton btnQuit; btnQuit.set_text_font("resources/Jersey25-Regular.ttf"); btnQuit.set_text_size(4);
+    btnQuit.set_text("Quit"); btnQuit.set_corner_radius(6.0f);
+    btnQuit.set_on_click([&](void){ glfwSetWindowShouldClose(window, GLFW_TRUE); });
+    mainMenu.addChild(&btnQuit);
+
+    // Page 2: Options Menu
+    GuiPanel optionsMenu;
+    optionsMenu.set_position(40.0f, 40.0f, false);
+    optionsMenu.set_size(460.0f, 260.0f, false);
+    optionsMenu.setBackgroundColor(0.06f, 0.06f, 0.08f, 0.80f);
+    optionsMenu.setBorderColor(0.9f, 0.9f, 0.95f, 0.25f);
+    optionsMenu.setBorderRadius(8.0f);
+    optionsMenu.setBorderThickness(1.5f);
+    optionsMenu.setLayout(GuiPanel::LayoutType::VERTICAL);
+    optionsMenu.setPadding(10.0f);
+    optionsMenu.setSpacing(12.0f);
+
+    GuiText titleOptions; titleOptions.set_text_font("resources/Jersey25-Regular.ttf"); titleOptions.set_text_size(6);
+    titleOptions.set_text("Options Menu"); titleOptions.set_text_color(0.95f,0.95f,1.0f,1.0f);
+    optionsMenu.addChild(&titleOptions);
+
+    GuiText optLabel; optLabel.set_text_font("resources/Jersey25-Regular.ttf"); optLabel.set_text_size(4);
+    optLabel.set_text("(Exemple) Réglages à venir...");
+    optionsMenu.addChild(&optLabel);
+
+    GuiButton btnBack; btnBack.set_text_font("resources/Jersey25-Regular.ttf"); btnBack.set_text_size(4);
+    btnBack.set_text("Back"); btnBack.set_corner_radius(6.0f);
+    btnBack.set_on_click([&guiManager](){ guiManager.setActivePage("Main Menu"); });
+    optionsMenu.addChild(&btnBack);
+
+    // Add pages and set initial active
+    guiManager.addPage(mainMenu, "Main Menu");
+    guiManager.addPage(optionsMenu, "Options Menu");
+    guiManager.setActivePage("Main Menu");
     
 
     // 7) Boucle principale
@@ -306,8 +376,9 @@ int main()
             progress.set_progress(p);
         }
 
-        // Dessin du panneau (dessine aussi les enfants)
+        // Dessin du panneau (désactivé via panel.hide()) puis de la page active
         panel.draw();
+        guiManager.draw();
 
         glfwSwapBuffers(window);
     }
@@ -357,11 +428,15 @@ void framebuffer_size_callback(GLFWwindow* /*window*/, int width, int height)
 void cursor_pos_callback(GLFWwindow* window, double xpos, double ypos)
 {
     GuiInput::glfw_cursor_pos_callback(window, xpos, ypos);
+    // Also forward to button system for hover/click detection
+    GuiButton::glfw_cursor_pos_callback(window, xpos, ypos);
 }
 
 void mouse_button_callback(GLFWwindow* window, int button, int action, int mods)
 {
     GuiInput::glfw_mouse_button_callback(window, button, action, mods);
+    // Also forward to button system for hover/click detection
+    GuiButton::glfw_mouse_button_callback(window, button, action, mods);
 }
 
 void char_callback(GLFWwindow* window, unsigned int codepoint)

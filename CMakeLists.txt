@@ -97,6 +97,8 @@ add_executable(MGE_XLR
   src/gui/GuiProgressBar.cpp
   src/gui/GuiMenuBar.h
   src/gui/GuiMenuBar.cpp
+  src/gui/GuiManager.h
+  src/gui/GuiManager.cpp
 )
 
 # Define shader directory at compile time (absolute path, forward slashes)
