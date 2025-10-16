@@ -54,12 +54,12 @@ std::pair<float,float> GuiMenuBar::preferred_size() const
 {
     if (m_size_w > 0.0f && m_size_h > 0.0f) return {pixel_w(), pixel_h()};
     // Height from text size + padding; width sum of labels + spacing
-    GuiText tmp = m_label_helper;
     float width = m_pad_x * 2.0f;
-    float height = std::max(22.0f, tmp.preferred_size().second + 2.0f * m_pad_y);
+    m_label_helper.set_text("X");
+    float height = std::max(22.0f, m_label_helper.preferred_size().second + 2.0f * m_pad_y);
     for (const auto& m : m_menus) {
-        tmp.set_text(m.label);
-        width += tmp.preferred_size().first + m_spacing;
+        m_label_helper.set_text(m.label);
+        width += m_label_helper.preferred_size().first + m_spacing;
     }
     return {std::max(200.0f, width), height};
 }

@@ -30,7 +30,7 @@ private:
     struct Item { std::string label; std::function<void()> cb; };
     struct Menu { std::string label; std::vector<Item> items; };
     std::vector<Menu> m_menus;
-    GuiText m_label_helper; // for measuring and rendering labels
+    mutable GuiText m_label_helper; // for measuring and rendering labels
     float m_bg[4] = {0.10f, 0.10f, 0.12f, 1.0f};
     float m_hi[4] = {0.20f, 0.30f, 0.55f, 1.0f};
     float m_spacing = 16.0f;
@@ -38,4 +38,3 @@ private:
     float m_pad_y = 6.0f;
     int m_open_menu = -1; // index of open top-level menu, -1 none
 };
-

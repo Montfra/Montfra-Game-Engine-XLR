@@ -201,6 +201,8 @@ void GuiPanel::draw()
     // Support alignment relative to parent (framebuffer if none)
     float x = 0.0f, y = 0.0f;
     compute_aligned_xy(w, h, x, y);
+    // Apply animations (offset + scaling) to this panel rect
+    apply_animation_to_rect(x, y, w, h);
 
     // Render state
     glEnable(GL_BLEND);
@@ -244,8 +246,12 @@ void GuiPanel::draw_panel_quad(float x, float y, float w, float h)
     glUniform2f(s_uRectMinLoc, x, y);
     glUniform2f(s_uRectMaxLoc, x + w, y + h);
     glUniform1f(s_uRadiusLoc, m_radius);
-    glUniform4fv(s_uBgColorLoc, 1, m_bg);
-    glUniform4fv(s_uBorderColorLoc, 1, m_border);
+    float bg_col[4];
+    apply_animation_to_color(m_bg, bg_col);
+    float border_col[4];
+    apply_animation_to_color(m_border, border_col);
+    glUniform4fv(s_uBgColorLoc, 1, bg_col);
+    glUniform4fv(s_uBorderColorLoc, 1, border_col);
     glUniform1f(s_uBorderThicknessLoc, m_border_thickness);
 
     glBindVertexArray(s_vao);

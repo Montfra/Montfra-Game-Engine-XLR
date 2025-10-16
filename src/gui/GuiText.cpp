@@ -387,13 +387,26 @@ void GuiText::draw()
     glActiveTexture(GL_TEXTURE0);
     glUseProgram(s_shader);
     glUniformMatrix4fv(s_uProjLoc, 1, GL_FALSE, proj);
-    glUniform4fv(s_uTextColorLoc, 1, m_color);
+    float final_col[4];
+    apply_animation_to_color(m_color, final_col);
+    glUniform4fv(s_uTextColorLoc, 1, final_col);
 
     glBindVertexArray(s_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_vbo);
 
-    float pen_x = x;
-    float baseline_y = y; // y is currently bottom of bounding box
+    // Before we generate glyph quads, capture original rect to compute animated transform
+    float old_x = x, old_y = y, old_w = (box_w > 0.0f ? box_w : 1.0f), old_h = (box_h > 0.0f ? box_h : 1.0f);
+    // Apply animation (offset + scale) to overall text bounding box
+    apply_animation_to_rect(x, y, box_w, box_h);
+    float center_old_x = old_x + 0.5f * old_w;
+    float center_old_y = old_y + 0.5f * old_h;
+    float center_new_x = x + 0.5f * box_w;
+    float center_new_y = y + 0.5f * box_h;
+    float sx_anim = (old_w != 0.0f) ? (box_w / old_w) : 1.0f;
+    float sy_anim = (old_h != 0.0f) ? (box_h / old_h) : 1.0f;
+
+    float pen_x = old_x; // use original geometry for layout, then transform to animated space per-vertex
+    float baseline_y = old_y; // y is bottom of bounding box
     float asc = 0.0f, desc = 0.0f;
     bool have_extents = vertical_extents(asc, desc);
     if (have_extents) {
@@ -419,6 +432,19 @@ void GuiText::draw()
             { xpos + w, ypos,     1.0f, 1.0f },
             { xpos + w, ypos + h, 1.0f, 0.0f },
         };
+
+        // Apply animated transform (scale around center + translate to new center)
+        for (int vi = 0; vi < 6; ++vi) {
+            float vx = verts[vi][0];
+            float vy = verts[vi][1];
+            // scale around old center
+            float dx = vx - center_old_x;
+            float dy = vy - center_old_y;
+            vx = center_new_x + dx * sx_anim;
+            vy = center_new_y + dy * sy_anim;
+            verts[vi][0] = vx;
+            verts[vi][1] = vy;
+        }
 
         glBindTexture(GL_TEXTURE_2D, g.texture_id);
         glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(verts), verts);

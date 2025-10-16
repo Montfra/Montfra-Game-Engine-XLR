@@ -77,6 +77,11 @@ add_executable(MGE_XLR
   src/gui/GuiElement.h
   src/gui/GuiText.cpp
   src/gui/GuiText.h
+  src/gui/GuiElement.cpp
+  src/gui/GuiAnimation.h
+  src/gui/GuiAnimation.cpp
+  src/gui/AnimationManager.h
+  src/gui/AnimationManager.cpp
   src/gui/GuiPanel.cpp
   src/gui/GuiPanel.h
   src/gui/GuiButton.cpp

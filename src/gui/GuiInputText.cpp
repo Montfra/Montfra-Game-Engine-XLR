@@ -53,10 +53,10 @@ std::pair<float,float> GuiInputText::preferred_size() const
 {
     if (m_size_w > 0.0f && m_size_h > 0.0f) return {pixel_w(), pixel_h()};
     // Default width: based on placeholder/typical text width + padding; min height from text size
-    GuiText tmp = m_label; // copy to estimate using same font/size
-    if (!m_text.empty()) tmp.set_text(m_text);
-    else tmp.set_text(m_placeholder.empty()?std::string(10,' '):m_placeholder);
-    auto label_size = tmp.preferred_size();
+    // Use the internal label for measurement (avoid copying GuiText since it is non-copyable)
+    std::string measure = !m_text.empty() ? m_text : (m_placeholder.empty() ? std::string(10,' ') : m_placeholder);
+    m_label.set_text(measure);
+    auto label_size = m_label.preferred_size();
     float w = std::max(160.0f, label_size.first + 2.0f * m_pad_x);
     float h = std::max(24.0f, label_size.second + 2.0f * m_pad_y);
     return {w, h};
@@ -141,13 +141,15 @@ void GuiInputText::draw()
         double t = glfwGetTime();
         if (std::fmod(t, 1.0) < 0.5) { // blink 0.5s on/off
             // Measure text width to place caret at end
-            GuiText meas = m_label; // copy retains font/size
-            meas.set_text(m_text);
-            float caret_x = text_x + meas.preferred_size().first + 1.0f;
+            // Reuse m_label for measurement safely (we already drew the label above)
+            m_label.set_text(m_text);
+            float caret_x = text_x + m_label.preferred_size().first + 1.0f;
             float caret_h = have_extents ? (asc + desc) : m_label.preferred_size().second;
             float caret_y = baseline_y - (have_extents ? desc : caret_h * 0.6f);
             const float caret_col[4] = { m_text_color[0], m_text_color[1], m_text_color[2], 0.95f };
             GuiDraw::draw_rect(caret_x, caret_y, 1.0f, caret_h, caret_col);
+            // Restore label text for next frame semantics
+            m_label.set_text(display);
         }
     }
 

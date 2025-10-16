@@ -4,6 +4,7 @@
 #include <string>
 #include <unordered_map>
 #include <optional>
+#include <utility>
 #include "GuiPanel.h"
 
 // GuiManager stores named GUI pages (each a GuiPanel) and draws only the active one.
@@ -16,7 +17,7 @@ public:
     ~GuiManager() = default;
 
     // Adds or replaces a page under the given name. Copies the panel by value.
-    void addPage(GuiPanel page, const std::string& name);
+    void addPage(GuiPanel&& page, const std::string& name);
 
     // Sets the active page by name. If not found, does nothing.
     void setActivePage(const std::string& name);

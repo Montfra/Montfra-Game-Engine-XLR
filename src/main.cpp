@@ -17,6 +17,7 @@
 #include "gui/GuiProgressBar.h"
 #include "gui/GuiMenuBar.h"
 #include "gui/GuiManager.h"
+#include "gui/AnimationManager.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -24,6 +25,7 @@
 #include <fstream>
 #include <sstream>
 #include <array>
+#include <utility>
 #include <cmath>
 
 #ifndef SHADER_DIR
@@ -263,6 +265,8 @@ int main()
     GuiSlider slider; slider.set_range(0.0f, 100.0f); slider.set_value(0.0f);
     slider.set_on_value_changed([&](float v){ char buf[64]; std::snprintf(buf, sizeof(buf), "Slider: %.1f", v); value_text.set_text(buf); std::printf("[Slider] value=%.3f\n", v); });
     panel.addChild(&value_text);
+    // Demonstrate moveBy on a text element (slide right a bit)
+    value_text.moveBy(24.0f, 0.0f, 0.8f);
     panel.addChild(&slider);
 
     // Checkbox toggling console action
@@ -313,13 +317,22 @@ int main()
     GuiButton btnOptions; btnOptions.set_text_font("resources/Jersey25-Regular.ttf"); btnOptions.set_text_size(4);
     btnOptions.set_alignment(GuiElement::GuiAlignment::Center);
     btnOptions.set_text("Options"); btnOptions.set_corner_radius(6.0f);
-    btnOptions.set_on_click([&guiManager](){ guiManager.setActivePage("Options Menu"); });
+    // Note: we set the on_click after btnQuit is defined below
     mainMenu.addChild(&btnOptions);
 
     GuiButton btnQuit; btnQuit.set_text_font("resources/Jersey25-Regular.ttf"); btnQuit.set_text_size(4);
     btnQuit.set_alignment(GuiElement::GuiAlignment::Center);
     btnQuit.set_text("Quit"); btnQuit.set_corner_radius(6.0f);
     btnQuit.set_on_click([&](void){ glfwSetWindowShouldClose(window, GLFW_TRUE); });
+    // Now safe to reference btnQuit
+    btnOptions.set_on_click([&](){
+        // Animate main menu out, then switch page
+        titleMain.fadeOut(0.25f);
+        btnPlay.slideOut(GuiElement::SlideDir::Left, 0.3f);
+        btnOptions.slideOut(GuiElement::SlideDir::Right, 0.3f);
+        btnQuit.slideOut(GuiElement::SlideDir::Down, 0.3f);
+        guiManager.setActivePage("Options Menu");
+    });
     mainMenu.addChild(&btnQuit);
 
     // Page 2: Options Menu
@@ -349,12 +362,19 @@ int main()
     GuiButton btnBack; btnBack.set_text_font("resources/Jersey25-Regular.ttf"); btnBack.set_text_size(4);
     btnBack.set_alignment(GuiElement::GuiAlignment::Center);
     btnBack.set_text("Back"); btnBack.set_corner_radius(6.0f);
-    btnBack.set_on_click([&guiManager](){ guiManager.setActivePage("Main Menu"); });
+    btnBack.set_on_click([&](){
+        // Bring back main menu with a slide-in cascade
+        guiManager.setActivePage("Main Menu");
+        titleMain.fadeIn(0.3f);
+        btnPlay.slideIn(GuiElement::SlideDir::Left, 0.3f);
+        btnOptions.slideIn(GuiElement::SlideDir::Right, 0.35f);
+        btnQuit.slideIn(GuiElement::SlideDir::Down, 0.4f);
+    });
     optionsMenu.addChild(&btnBack);
 
     // Add pages and set initial active
-    guiManager.addPage(mainMenu, "Main Menu");
-    guiManager.addPage(optionsMenu, "Options Menu");
+    guiManager.addPage(std::move(mainMenu), "Main Menu");
+    guiManager.addPage(std::move(optionsMenu), "Options Menu");
     guiManager.setActivePage("Main Menu");
 
     // Demonstration: free-floating aligned texts anchored to the window
@@ -369,9 +389,24 @@ int main()
     corner.set_text("Top Right");
     corner.set_alignment(GuiElement::GuiAlignment::TopRight);
     corner.set_anchor_offset(12.0f, 12.0f, false); // 12px margin from top-right
+    // Demonstrate scaleTo on an aligned element
+    corner.scaleTo(1.2f, 0.6f);
     
 
+    // Add some example animations on GUI elements
+    // Fade in the main title and slide buttons
+    titleMain.fadeIn(0.6f);
+    btnPlay.slideIn(GuiElement::SlideDir::Left, 0.5f);
+    btnOptions.slideIn(GuiElement::SlideDir::Right, 0.6f);
+    btnQuit.slideIn(GuiElement::SlideDir::Down, 0.7f);
+    // Pulse on hover and shake on click for feedback
+    btnPlay.set_on_hover([&btnPlay](){ btnPlay.pulse(1.06f, 0.25f); });
+    btnPlay.set_on_click([&](){ std::puts("[Main Menu] Play clicked"); btnPlay.shake(8.0f, 0.4f, 28.0f); });
+    // Options page title color transition
+    titleOptions.colorTo(0.9f, 0.9f, 1.0f, 1.0f, 0.8f);
+
     // 7) Boucle principale
+    double last_time = glfwGetTime();
     while (!glfwWindowShouldClose(window)) {
         // Reset input one-shot flags, then poll events to fill them
         GuiButton::begin_frame(); // keep old button system in sync if used
@@ -394,6 +429,13 @@ int main()
         glBindVertexArray(vao);
         glDrawArrays(GL_TRIANGLES, 0, 3);
 
+        // Update animations
+        double now = glfwGetTime();
+        float dt = static_cast<float>(now - last_time);
+        if (dt < 0.0f) dt = 0.0f; if (dt > 0.1f) dt = 0.1f; // clamp
+        AnimationManager::instance().update(dt);
+        last_time = now;
+
         // Update progress for demo
         {
             double t = glfwGetTime();
@@ -406,8 +448,8 @@ int main()
         guiManager.draw();
 
         // Draw free-floating aligned texts (relative to window)
-        footer.draw();
-        corner.draw();
+    footer.draw();
+    corner.draw();
 
         glfwSwapBuffers(window);
     }

@@ -69,6 +69,7 @@ private:
     // Callbacks
     std::function<void()> m_on_hover;
     std::function<void()> m_on_click;
+    bool m_hovered_prev = false; // track hover enter
 
     // Shared GL resources (simple rounded-rect shader)
     static unsigned int s_vao;

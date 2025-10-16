@@ -11,6 +11,8 @@ public:
 
     GuiPanel();
     ~GuiPanel();
+    GuiPanel(GuiPanel&&) noexcept = default;
+    GuiPanel& operator=(GuiPanel&&) noexcept = default;
 
     void addChild(GuiElement* element);
     void removeChild(GuiElement* element);

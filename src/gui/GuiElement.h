@@ -2,13 +2,24 @@
 #pragma once
 
 #include <utility>
+#include <vector>
+#include <memory>
 #include <glad/glad.h>
+
+// Forward declaration of animation base (defined in GuiAnimation.h)
+class Animation;
+struct AnimDeleter { void operator()(Animation*) const; };
 
 // Coordinates and sizes are in screen pixels by default (origin at bottom-left),
 // or as percentage of framebuffer size when *_is_percent is true.
 class GuiElement {
 public:
-    virtual ~GuiElement() = default;
+    GuiElement() = default;
+    virtual ~GuiElement();
+    GuiElement(const GuiElement&) = delete;
+    GuiElement& operator=(const GuiElement&) = delete;
+    GuiElement(GuiElement&&) noexcept = default;
+    GuiElement& operator=(GuiElement&&) noexcept = default;
 
     // Alignment anchor for automatic positioning relative to a parent rectangle
     enum class GuiAlignment {
@@ -124,7 +135,81 @@ public:
         return {x, y};
     }
 
+    // -------- Public animation API (implemented in GuiElement.cpp) --------
+    // Update all animations and recompute accumulated state (called by AnimationManager)
+    void update_animations(float dt);
+
+    // High-level helpers
+    // All time values are in seconds. Unless specified, positions are pixel offsets relative to layout.
+    void fadeIn(float duration_sec = 0.3f);
+    void fadeOut(float duration_sec = 0.3f);
+    void moveTo(float offset_x_px, float offset_y_px, float duration_sec = 0.3f); // relative offset
+    void moveBy(float dx_px, float dy_px, float duration_sec = 0.3f);             // incremental offset
+    void scaleTo(float s, float duration_sec = 0.3f);
+    void pulse(float max_scale = 1.1f, float duration_sec = 0.6f);
+    void colorTo(float r, float g, float b, float a, float duration_sec = 0.3f);
+    void shake(float amplitude_px = 10.0f, float duration_sec = 0.5f, float freq_hz = 25.0f);
+    enum class SlideDir { Left, Right, Up, Down };
+    void slideIn(SlideDir dir, float duration_sec = 0.35f);
+    void slideOut(SlideDir dir, float duration_sec = 0.35f);
+    void stopAnimations();
+
 protected:
+    // ---------- Animation support (accumulated per-frame state) ----------
+    struct AnimState {
+        float offset_x = 0.0f;
+        float offset_y = 0.0f;
+        float scale_x  = 1.0f;
+        float scale_y  = 1.0f;
+        float alpha_mul = 1.0f; // multiplies final alpha
+        bool  has_color_override = false;
+        float color_override[4] = {1.f,1.f,1.f,1.f};
+    };
+
+    // Apply accumulated animation to a rectangle (x,y,w,h), scaling around its center
+    void apply_animation_to_rect(float& x, float& y, float& w, float& h) const {
+        // Offset
+        x += m_anim.offset_x;
+        y += m_anim.offset_y;
+        // Scale around center
+        if (m_anim.scale_x != 1.0f || m_anim.scale_y != 1.0f) {
+            float cx = x + w * 0.5f;
+            float cy = y + h * 0.5f;
+            float hw = (w * 0.5f) * m_anim.scale_x;
+            float hh = (h * 0.5f) * m_anim.scale_y;
+            x = cx - hw;
+            y = cy - hh;
+            w = hw * 2.0f;
+            h = hh * 2.0f;
+        }
+    }
+
+    // Compute final color (applies override or alpha multiplier)
+    void apply_animation_to_color(const float in_rgba[4], float out_rgba[4]) const {
+        if (m_anim.has_color_override) {
+            out_rgba[0] = m_anim.color_override[0];
+            out_rgba[1] = m_anim.color_override[1];
+            out_rgba[2] = m_anim.color_override[2];
+            out_rgba[3] = m_anim.color_override[3];
+        } else {
+            out_rgba[0] = in_rgba[0];
+            out_rgba[1] = in_rgba[1];
+            out_rgba[2] = in_rgba[2];
+            out_rgba[3] = in_rgba[3] * m_anim.alpha_mul;
+        }
+    }
+
+public:
+    // Internal accumulation hooks (used by Animation implementations)
+    void anim_add_offset(float dx, float dy) { m_anim.offset_x += dx; m_anim.offset_y += dy; }
+    void anim_mul_scale(float sx, float sy) { m_anim.scale_x *= sx; m_anim.scale_y *= sy; }
+    void anim_mul_alpha(float a) { m_anim.alpha_mul *= a; }
+    void anim_set_color_override(float r, float g, float b, float a) {
+        m_anim.has_color_override = true;
+        m_anim.color_override[0]=r; m_anim.color_override[1]=g; m_anim.color_override[2]=b; m_anim.color_override[3]=a;
+    }
+    void anim_clear_color_override() { m_anim.has_color_override = false; }
+
     // Compute final aligned position for this element given its size.
     // If PositionMode is Manual, returns pixel_x/pixel_y.
     void compute_aligned_xy(float elem_w, float elem_h, float& out_x, float& out_y) const {
@@ -187,6 +272,10 @@ protected:
     bool  m_size_is_percent = false;
 
     bool  m_visible = true;
+
+    // Per-frame animation accumulation and active animations
+    AnimState m_anim{};
+    std::vector<std::unique_ptr<Animation, AnimDeleter>> m_animations;
 
     // Alignment state
     PositionMode m_pos_mode = PositionMode::Manual;

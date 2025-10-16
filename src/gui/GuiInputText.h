@@ -39,7 +39,7 @@ private:
     bool hit_test(float px, float py, float x, float y, float w, float h) const;
 
 private:
-    GuiText m_label;
+    mutable GuiText m_label;
     std::string m_text;
     std::string m_placeholder;
     bool m_focused = false;
@@ -53,4 +53,3 @@ private:
 
     std::function<void(const std::string&)> m_on_changed;
 };
-

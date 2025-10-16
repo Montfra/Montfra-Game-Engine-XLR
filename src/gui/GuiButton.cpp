@@ -245,15 +245,19 @@ void GuiButton::draw()
         compute_aligned_xy(w, h, x, y);
     }
 
-    // Hover/Click detection
+    // Apply animations (position offset + scaling)
+    apply_animation_to_rect(x, y, w, h);
+
+    // Hover/Click detection (onHover on edge: enter only)
     const bool hovered = hit_test(static_cast<float>(s_mouse_x_px), static_cast<float>(s_mouse_y_px), x, y, w, h);
-    if (hovered) onHover();
+    if (hovered && !m_hovered_prev) onHover();
     bool clicked_now = false;
     if (hovered && s_left_clicked) {
         clicked_now = true;
         s_left_clicked = false; // consume click for this frame
     }
     if (clicked_now) onClick();
+    m_hovered_prev = hovered;
 
     // Prepare GL state
     glEnable(GL_BLEND);
@@ -267,6 +271,8 @@ void GuiButton::draw()
 
     // Choose color
     const float* color = hovered ? m_hover_bg : m_bg;
+    float final_col[4];
+    apply_animation_to_color(color, final_col);
 
     // Quad verts
     float verts[12] = {
@@ -283,7 +289,7 @@ void GuiButton::draw()
     glUniform2f(s_uRectMinLoc, x, y);
     glUniform2f(s_uRectMaxLoc, x + w, y + h);
     glUniform1f(s_uRadiusLoc, m_radius);
-    glUniform4fv(s_uBgColorLoc, 1, color);
+    glUniform4fv(s_uBgColorLoc, 1, final_col);
 
     glBindVertexArray(s_vao);
     glBindBuffer(GL_ARRAY_BUFFER, s_vbo);

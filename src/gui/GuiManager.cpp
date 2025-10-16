@@ -4,10 +4,15 @@
 
 #include <cstdio>
 
-void GuiManager::addPage(GuiPanel page, const std::string& name)
+void GuiManager::addPage(GuiPanel&& page, const std::string& name)
 {
-    // Insert or replace by name; store by value
-    m_pages[name] = std::move(page);
+    // Insert or replace by name; move into container
+    auto it = m_pages.find(name);
+    if (it == m_pages.end()) {
+        m_pages.emplace(name, std::move(page));
+    } else {
+        it->second = std::move(page);
+    }
     // If no active page yet, set the first added as active
     if (!m_active.has_value()) {
         m_active = name;
